@@ -1,0 +1,71 @@
+# Sample application Deployment.
+#
+# Two replicas on a single-node cluster is intentional: replicas are scheduled
+# onto *nodes that have capacity*, and one node with capacity for two Pods is
+# perfectly valid. You get real ReplicaSet behaviour (rolling updates,
+# self-healing) without needing a second machine. What you do NOT get is
+# node-failure tolerance — both Pods die if the node dies.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: demo
+  labels:
+    app.kubernetes.io/name: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web        # must match template labels below
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.30-alpine        # multi-arch: works on amd64 and arm64
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          # Resource requests are what the scheduler reserves. Keep them small
+          # so two replicas fit on a 2-vCPU / 4 GB node alongside the control plane.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          # Liveness: restart the container if this fails.
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # Readiness: remove the Pod from Service endpoints if this fails.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          # Startup: gives a slow container time before liveness kicks in.
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            failureThreshold: 30
+            periodSeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["NET_BIND_SERVICE", "CHOWN", "SETGID", "SETUID"]

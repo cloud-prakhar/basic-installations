@@ -1,0 +1,9 @@
+# Namespace for the sample application.
+# A namespace is a logical partition of the cluster. Keeping the demo in its
+# own namespace means cleanup is a single `kubectl delete namespace demo`.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+  labels:
+    app.kubernetes.io/part-of: kubeadm-single-node-lab

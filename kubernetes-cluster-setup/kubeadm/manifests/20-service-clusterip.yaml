@@ -1,0 +1,20 @@
+# ClusterIP Service — the default Service type.
+#
+# Reachable ONLY from inside the cluster, at:
+#   web.demo.svc.cluster.local:80
+# Use this with `kubectl port-forward` to reach the app from your laptop
+# without exposing anything on the node.
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: demo
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: web   # picks up Pods created by 10-deployment.yaml
+  ports:
+    - name: http
+      port: 80                    # port on the Service
+      targetPort: http            # named port on the container
+      protocol: TCP

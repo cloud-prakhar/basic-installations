@@ -1,0 +1,44 @@
+# OPTIONAL — LoadBalancer Service.
+#
+# 💰 COST WARNING 💰
+# Applying this file makes AWS provision a real Network Load Balancer.
+# An NLB bills an hourly charge PLUS a capacity-unit charge for as long as it
+# exists, and its public IPv4 addresses bill separately. It keeps billing even
+# when nothing is talking to it.
+#
+# This is an OPTIONAL exercise. The default access method in this guide is:
+#   kubectl -n demo port-forward svc/web 8080:80      (costs nothing)
+#
+# If you do apply it:
+#   1. Test it.
+#   2. DELETE IT IMMEDIATELY:  kubectl delete -f 30-service-loadbalancer.yaml
+#   3. Confirm it is gone:     aws elbv2 describe-load-balancers
+#
+# 🔴 Deleting the EKS CLUSTER does NOT reliably delete load balancers created
+#    by Services. Delete this Service BEFORE deleting the cluster, or you will
+#    be left paying for an orphaned NLB. See cleanup.md.
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-lb
+  namespace: demo
+  annotations:
+    # "external" + instance target type = an NLB managed by the AWS Load
+    # Balancer Controller if installed; otherwise the in-tree cloud provider
+    # creates a classic-style NLB. Either way it is billable.
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "instance"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  # Restrict who can reach the load balancer. Replace with your own /32.
+  # Without this, the NLB is open to the entire internet.
+  loadBalancerSourceRanges:
+    - <YOUR_PUBLIC_IP_CIDR>

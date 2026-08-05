@@ -8,6 +8,7 @@ Step-by-step installation guides for learners. Each guide assumes no prior exper
 |-------|----------------|------|
 | [Flask Installation Guide](./flask_installation_guide.md) | Installing Flask on Windows, WSL, and macOS | Free |
 | [Jenkins on AWS EC2 — Manual Deployment](./jenkins_ec2_deployment_guide.md) | Deploying Jenkins on an EC2 instance from the AWS Console and accessing it securely | ~$1/day while running — **clean up when done** |
+| [Single-Node Kubernetes Cluster Setup Handbook](./kubernetes-cluster-setup/) | Four independent guides — kubeadm, Minikube, Kind, and a small Amazon EKS cluster — each on a laptop (Windows/WSL2/Linux/macOS) or one Ubuntu EC2 instance | Free locally; EC2 and EKS bill hourly — **clean up when done** |
 
 ## Scripts
 
@@ -15,6 +16,17 @@ Step-by-step installation guides for learners. Each guide assumes no prior exper
 |--------|---------|
 | [`scripts/install-jenkins.sh`](./scripts/install-jenkins.sh) | Installs Java 21 + Jenkins LTS on Ubuntu. Works as EC2 user data or run by hand. |
 | [`scripts/verify-jenkins.sh`](./scripts/verify-jenkins.sh) | Health check for a Jenkins install, with a fix hint for each failure. |
+
+## Kubernetes handbook at a glance
+
+[`kubernetes-cluster-setup/`](./kubernetes-cluster-setup/) contains four self-contained guides. A learner reads exactly one and never needs the others.
+
+| Guide | Tool | Nodes | Where it runs |
+|-------|------|------:|---------------|
+| [kubeadm](./kubernetes-cluster-setup/kubeadm/) | `kubeadm` + `containerd` | 1 | Native Linux · WSL2 · Ubuntu VM on macOS · one Ubuntu EC2 instance |
+| [Minikube](./kubernetes-cluster-setup/minikube/) | `minikube` | 1 | Windows · WSL2 · Linux · macOS · one Ubuntu EC2 instance |
+| [Kind](./kubernetes-cluster-setup/kind/) | `kind` | 1 | Windows · WSL2 · Linux · macOS · one Ubuntu EC2 instance |
+| [Amazon EKS](./kubernetes-cluster-setup/eksctl/) | `eksctl` | 1, max 2 | AWS — cost-aware, no NAT Gateway |
 
 ## For instructors
 

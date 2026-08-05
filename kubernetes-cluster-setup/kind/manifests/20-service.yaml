@@ -1,0 +1,38 @@
+# Two Services for the same Deployment.
+#
+# `web`          — ClusterIP, in-cluster only. Backend for the Ingress, and the
+#                  target for `kubectl port-forward`.
+# `web-nodeport` — NodePort 30080. Reachable from your host ONLY because
+#                  kind-config.yaml maps containerPort 30080 -> hostPort 30080.
+#                  Without that mapping the port exists inside the node
+#                  container and nowhere else.
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: demo
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-nodeport
+  namespace: demo
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      nodePort: 30080          # must match extraPortMappings in kind-config.yaml
+      protocol: TCP

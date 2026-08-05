@@ -1,0 +1,264 @@
+# =============================================================================
+# Small, cost-aware Amazon EKS cluster for learning.
+#
+# ONE managed node group · desired 1 · min 1 · MAX 2 · no NAT Gateway.
+#
+# Create with:
+#   eksctl create cluster -f cluster-config.yaml
+#
+# 💰 COST WARNING 💰
+# Creating this cluster starts billing immediately:
+#   - The EKS control plane bills per hour, per cluster, from creation to
+#     deletion, whether or not you use it.
+#   - Each worker node is an EC2 instance billed per second.
+#   - Each node has an EBS root volume, billed per GB-month.
+#   - Public IPv4 addresses are billed per hour, per address.
+# Check current pricing before you create:
+#   https://aws.amazon.com/eks/pricing/
+#   https://aws.amazon.com/ec2/pricing/on-demand/
+# DELETE THE CLUSTER WHEN YOU FINISH — see cleanup.md.
+#
+# Replace every <PLACEHOLDER> before running. Do not leave the brackets in.
+# =============================================================================
+
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+# -----------------------------------------------------------------------------
+# metadata — identity of the cluster
+# -----------------------------------------------------------------------------
+metadata:
+  name: <CLUSTER_NAME>              # e.g. eks-lab. Lowercase, letters/digits/hyphens.
+  region: <AWS_REGION>              # e.g. us-east-1. Everything is created here.
+  version: "<KUBERNETES_VERSION>"   # e.g. "1.36" — MINOR version only, quoted.
+                                    # Check supported versions:
+                                    # https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions-standard.html
+  tags:
+    Environment: learning
+    Owner: <YOUR_NAME_OR_TEAM>
+    Purpose: kubernetes-training
+    DeleteAfter: <YYYY-MM-DD>       # your own reminder — AWS does not act on this
+
+# -----------------------------------------------------------------------------
+# iam — OIDC provider
+#
+# `withOIDC: true` creates an IAM OIDC identity provider for the cluster. That
+# is what makes IRSA (IAM Roles for Service Accounts) possible: a Pod's
+# ServiceAccount can assume an IAM role directly, instead of inheriting the
+# node's role. Several managed add-ons (notably the EBS CSI driver) require it.
+#
+# It costs nothing. Enable it — retrofitting later is more work.
+# -----------------------------------------------------------------------------
+iam:
+  withOIDC: true
+
+# -----------------------------------------------------------------------------
+# accessConfig — how humans and roles authenticate to the cluster
+#
+# API_AND_CONFIG_MAP is the current recommended mode. Cluster permissions are
+# managed with EKS *access entries* (an AWS API) rather than by hand-editing the
+# legacy aws-auth ConfigMap. The ConfigMap still works for backwards
+# compatibility.
+#
+# bootstrapClusterCreatorAdminPermissions: true gives the IAM principal that
+# creates the cluster cluster-admin. Convenient for a solo lab. On a shared or
+# production cluster, set it false and grant access explicitly.
+# -----------------------------------------------------------------------------
+accessConfig:
+  authenticationMode: API_AND_CONFIG_MAP
+  bootstrapClusterCreatorAdminPermissions: true
+
+  # Optional: grant another IAM principal access without editing any ConfigMap.
+  # accessEntries:
+  #   - principalARN: arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>
+  #     accessPolicies:
+  #       - policyARN: arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy
+  #         accessScope:
+  #           type: cluster
+
+# -----------------------------------------------------------------------------
+# vpc — networking
+#
+# 💰 THE MOST IMPORTANT COST DECISION IN THIS FILE 💰
+#
+# `nat.gateway: Disable` means NO NAT Gateway is created. A NAT Gateway is one
+# of the most expensive small-scale AWS resources: an hourly charge plus a
+# per-GB data-processing charge, running 24/7 whether used or not. For a
+# learning cluster that is pure waste.
+#
+# The trade-off: with no NAT Gateway, nodes must live in PUBLIC subnets with
+# public IPs so they can reach the internet (to pull images and talk to the EKS
+# control plane endpoint). That is acceptable for a temporary lab where the
+# security group only permits what you need. It is NOT how production is built
+# — production puts nodes in private subnets behind a NAT Gateway, or uses VPC
+# endpoints, so no node is directly addressable from the internet.
+#
+# See README.md for the full trade-off discussion.
+# -----------------------------------------------------------------------------
+vpc:
+  nat:
+    gateway: Disable              # Disable | Single | HighlyAvailable
+
+  clusterEndpoints:
+    # publicAccess: the Kubernetes API endpoint is reachable from the internet.
+    # Required unless you run kubectl from inside the VPC (bastion, VPN, or
+    # Direct Connect). Restrict it with publicAccessCIDRs below.
+    publicAccess: true
+    # privateAccess: also resolve the endpoint from inside the VPC. Keeping this
+    # true means node-to-control-plane traffic stays inside AWS.
+    privateAccess: true
+
+  # 🔒 Restrict WHO can reach the Kubernetes API endpoint.
+  # Replace with your own address as a /32, e.g. "203.0.113.45/32".
+  # Find it with:  curl -s https://checkip.amazonaws.com
+  #
+  # Leaving this as 0.0.0.0/0 means anyone on the internet can attempt to
+  # authenticate against your API server. Authentication still protects you,
+  # but there is no reason to be reachable by the whole world.
+  #
+  # NOTE: if your ISP rotates your IP, you must update this or you lose access:
+  #   eksctl utils update-cluster-endpoints --cluster=<CLUSTER_NAME> \
+  #     --public-access-cidrs=<NEW_CIDR> --approve
+  publicAccessCIDRs:
+    - <YOUR_PUBLIC_IP_CIDR>
+
+# -----------------------------------------------------------------------------
+# managedNodeGroups — the worker nodes
+#
+# EXACTLY ONE node group. desiredCapacity 1, minSize 1, maxSize 2.
+# Do not add a second node group. Do not raise maxSize above 2.
+#
+# "Managed" means AWS handles the node lifecycle: AMI updates, draining on
+# scale-in, and graceful replacement. Self-managed node groups exist but need
+# far more work.
+# -----------------------------------------------------------------------------
+managedNodeGroups:
+  - name: <NODE_GROUP_NAME>         # e.g. ng-lab
+
+    # --- Instance sizing -----------------------------------------------------
+    # A t3.medium (2 vCPU / 4 GB) is the usual starting point for a learning
+    # cluster. Anything smaller struggles: the VPC CNI, kube-proxy, and CoreDNS
+    # all run on the node before your workloads get anything.
+    #
+    # instanceTypes (plural) lets EKS pick whichever type has capacity, which
+    # reduces "insufficient capacity" failures. All listed types should be
+    # similar in size.
+    instanceTypes:
+      - <INSTANCE_TYPE>             # e.g. t3.medium
+      - <INSTANCE_TYPE_ALTERNATE>   # e.g. t3a.medium — remove this line if unsure
+
+    # --- Capacity: ONE node, maximum TWO ------------------------------------
+    desiredCapacity: 1              # start with one node
+    minSize: 1                      # never scale below one
+    maxSize: 2                      # 🔴 HARD CEILING — never raise this
+
+    # --- Storage -------------------------------------------------------------
+    volumeSize: 20                  # GB. 20 is enough for a lab; images need room.
+    volumeType: gp3                 # gp3 is cheaper and faster than gp2
+    volumeEncrypted: true           # encryption at rest costs nothing extra
+
+    # --- Placement -----------------------------------------------------------
+    # privateNetworking: false puts nodes in PUBLIC subnets with public IPs.
+    # This is what makes the no-NAT-Gateway design work. Set it true only if
+    # you also set vpc.nat.gateway to Single or HighlyAvailable — otherwise
+    # nodes cannot reach the internet and will never join the cluster.
+    privateNetworking: false
+
+    # --- AMI -----------------------------------------------------------------
+    # AL2023 is the current EKS-optimized Amazon Linux family.
+    amiFamily: AmazonLinux2023
+
+    # --- Labels: Kubernetes-side metadata -----------------------------------
+    labels:
+      role: worker
+      environment: learning
+      nodegroup: <NODE_GROUP_NAME>
+
+    # --- Tags: AWS-side metadata, used for cost allocation -------------------
+    tags:
+      Environment: learning
+      Owner: <YOUR_NAME_OR_TEAM>
+      Purpose: kubernetes-training
+      DeleteAfter: <YYYY-MM-DD>
+
+    # --- SSH -----------------------------------------------------------------
+    # Disabled deliberately. Use SSM Session Manager if you need a node shell —
+    # no key to manage, no port 22 open, and sessions are logged in CloudTrail.
+    ssh:
+      allow: false
+      enableSsm: true
+
+    # --- Node IAM ------------------------------------------------------------
+    # These managed policies are the minimum a node needs to join and function.
+    # withAddonPolicies grants extra permissions to the NODE ROLE — convenient,
+    # but every Pod on the node inherits them via the instance metadata service.
+    # Prefer IRSA or EKS Pod Identity for application permissions. See README.md.
+    iam:
+      withAddonPolicies:
+        # imageBuilder: false     # ECR push access — not needed for this lab
+        # autoScaler: false       # only if you install Cluster Autoscaler
+        # ebs: false              # the EBS CSI add-on below uses IRSA instead
+        cloudWatch: false         # true would let nodes write CloudWatch logs
+        externalDNS: false
+        certManager: false
+
+    # --- Updates -------------------------------------------------------------
+    # maxUnavailable during a managed node group update. With one node, an
+    # update means brief downtime — expected and fine for a lab.
+    updateConfig:
+      maxUnavailable: 1
+
+# -----------------------------------------------------------------------------
+# addons — AWS-managed cluster add-ons
+#
+# These four are the EKS baseline. VPC CNI, kube-proxy, and CoreDNS are
+# installed on every cluster anyway; declaring them here makes them *managed*,
+# so AWS handles version updates. The EBS CSI driver is optional but needed if
+# you want PersistentVolumeClaims to work.
+#
+# Keep the list short. Every add-on consumes CPU and memory on your single node.
+# -----------------------------------------------------------------------------
+addons:
+  # Amazon VPC CNI — gives every Pod a real VPC IP address. This is why EKS Pod
+  # networking integrates natively with security groups and VPC routing, and
+  # also why node instance type limits how many Pods fit (IP-per-Pod).
+  - name: vpc-cni
+    attachPolicyARNs:
+      - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+    # useDefaultPodIdentityAssociations: true   # newer alternative to IRSA
+
+  # kube-proxy — implements Kubernetes Service networking on each node.
+  - name: kube-proxy
+
+  # CoreDNS — cluster DNS.
+  - name: coredns
+
+  # EBS CSI driver — required for PersistentVolumeClaims backed by EBS.
+  # Remove this block if your lab does not use persistent storage; it saves a
+  # little memory. 💰 Note that any volume it provisions is a billable EBS
+  # volume, and a PVC left behind after cluster deletion keeps billing.
+  - name: aws-ebs-csi-driver
+    wellKnownPolicies:
+      ebsCSIController: true       # creates the IRSA role automatically
+
+  # Not enabled here, but worth knowing about:
+  # - name: eks-pod-identity-agent   # newer, simpler alternative to IRSA
+
+# -----------------------------------------------------------------------------
+# cloudWatch — control-plane logging
+#
+# 💰 Control-plane logs are billed by CloudWatch Logs for ingestion and storage.
+# For a short lab they are cheap but not free, and they are rarely needed.
+#
+# Left DISABLED by default. Uncomment selectively if you are debugging
+# authentication or API problems — "audit" is by far the highest volume.
+# -----------------------------------------------------------------------------
+# cloudWatch:
+#   clusterLogging:
+#     enableTypes:
+#       - "api"
+#       - "audit"                  # 💰 highest volume — enable only when needed
+#       - "authenticator"
+#       - "controllerManager"
+#       - "scheduler"
+#     logRetentionInDays: 7        # cap retention so old logs stop costing money

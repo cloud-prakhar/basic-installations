@@ -1,0 +1,30 @@
+# Ingress for the sample app.
+#
+# Requires the ingress add-on:   minikube addons enable ingress
+#
+# The host below must resolve to the Minikube IP. Add a hosts-file entry:
+#   Linux/macOS : /etc/hosts
+#   Windows     : C:\Windows\System32\drivers\etc\hosts   (edit as Administrator)
+#   <minikube ip>   demo.local
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  namespace: demo
+  annotations:
+    # Rewrite is not needed here (path is "/"), but this is where nginx-specific
+    # behaviour is configured when you do need it.
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx        # provided by the `ingress` add-on
+  rules:
+    - host: demo.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web        # the ClusterIP Service from 20-service.yaml
+                port:
+                  number: 80

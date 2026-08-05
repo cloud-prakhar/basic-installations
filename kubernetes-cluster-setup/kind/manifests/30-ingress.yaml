@@ -1,0 +1,32 @@
+# Ingress for the sample app.
+#
+# Requires:
+#   1. A cluster created with kind-config.yaml (port 80 mapped to the host and
+#      the node labelled ingress-ready=true), and
+#   2. The ingress-nginx controller installed with the Kind provider manifest.
+#
+# Then reach it at:   curl -H "Host: demo.local" http://localhost
+# or add a hosts-file entry pointing demo.local at 127.0.0.1:
+#   Windows : C:\Windows\System32\drivers\etc\hosts   (edit as Administrator)
+#   Linux   : /etc/hosts
+#   macOS   : /etc/hosts
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  namespace: demo
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx        # created by the ingress-nginx installation
+  rules:
+    - host: demo.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web        # the ClusterIP Service from 20-service.yaml
+                port:
+                  number: 80

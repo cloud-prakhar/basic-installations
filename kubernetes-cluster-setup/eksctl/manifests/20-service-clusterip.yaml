@@ -1,0 +1,21 @@
+# ClusterIP Service — the DEFAULT, cost-conscious way to reach the app.
+#
+# Reachable only from inside the cluster. Combine with:
+#   kubectl -n demo port-forward svc/web 8080:80
+# which tunnels through the EKS API server and creates NO billable AWS
+# infrastructure — no load balancer, no public IP, no data-transfer charges
+# beyond the API traffic itself.
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: demo
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

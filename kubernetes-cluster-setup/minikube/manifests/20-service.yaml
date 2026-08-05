@@ -1,0 +1,36 @@
+# Two Services for the same Deployment.
+#
+# `web`          — ClusterIP, in-cluster only. Use with `kubectl port-forward`
+#                  and as the backend for the Ingress in 30-ingress.yaml.
+# `web-nodeport` — NodePort, reachable at <minikube ip>:30080, and openable
+#                  with `minikube service web-nodeport -n demo`.
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: demo
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-nodeport
+  namespace: demo
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      nodePort: 30080          # must be 30000-32767
+      protocol: TCP

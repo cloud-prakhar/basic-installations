@@ -1,0 +1,107 @@
+# Kind cluster configuration — ONE control-plane node, with host port mapping.
+#
+# Create with:
+#   kind create cluster --name demo --config kind-config.yaml
+#
+# There is deliberately NO `role: worker` entry. This is a single-node cluster:
+# the control-plane node also schedules your application Pods.
+#
+# Every field is explained below.
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4       # current Kind config API version
+
+# ---------------------------------------------------------------------------
+# name — the cluster name. A `--name` flag on the command line overrides this.
+# The Docker container will be called "<name>-control-plane" and the kubectl
+# context will be "kind-<name>".
+# ---------------------------------------------------------------------------
+name: demo
+
+nodes:
+  - role: control-plane
+    # -----------------------------------------------------------------------
+    # image — pin the Kubernetes version. Optional: omit to use the default
+    # image for your Kind version. Always use the @sha256 digest published in
+    # the Kind release notes — tags alone are not guaranteed to be the image
+    # built for your Kind release.
+    #
+    # Check https://github.com/kubernetes-sigs/kind/releases for the digest
+    # matching your Kind version, then uncomment and paste it here.
+    # -----------------------------------------------------------------------
+    # image: kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
+
+    # -----------------------------------------------------------------------
+    # kubeadmConfigPatches — Kind bootstraps with kubeadm, so you can patch
+    # the kubeadm config directly.
+    #
+    # The patch below labels this node `ingress-ready=true`. The ingress-nginx
+    # "kind" provider manifest uses that label as a nodeSelector, so without it
+    # the ingress controller Pod stays Pending forever.
+    # -----------------------------------------------------------------------
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+
+    # -----------------------------------------------------------------------
+    # extraPortMappings — publish ports from the node container to your host.
+    #
+    # Kind nodes are Docker containers on an internal Docker network. NodePorts
+    # are NOT reachable from your host unless mapped here. This is the single
+    # most important Kind config feature.
+    #
+    # containerPort : port inside the node (what the Service/ingress listens on)
+    # hostPort      : port on YOUR machine
+    # protocol      : TCP or UDP
+    # listenAddress : optional; defaults to 0.0.0.0. Set "127.0.0.1" to keep
+    #                 the port private to your machine instead of exposing it
+    #                 to your whole LAN.
+    #
+    # NOTE: these can only be set at cluster-creation time. Adding a mapping
+    # later means deleting and recreating the cluster.
+    # -----------------------------------------------------------------------
+    extraPortMappings:
+      # HTTP — ingress controller
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+        listenAddress: "127.0.0.1"
+
+      # HTTPS — ingress controller
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+        listenAddress: "127.0.0.1"
+
+      # NodePort for the sample app's NodePort Service (30080)
+      - containerPort: 30080
+        hostPort: 30080
+        protocol: TCP
+        listenAddress: "127.0.0.1"
+
+# ---------------------------------------------------------------------------
+# networking — optional. The defaults are sensible; these are shown so you know
+# they exist.
+# ---------------------------------------------------------------------------
+networking:
+  # apiServerAddress — which host address the API server is published on.
+  # 127.0.0.1 (the default) keeps the API server private to this machine.
+  # Set it to a routable address only if you need kubectl from another host —
+  # and understand you are exposing cluster-admin access when you do.
+  apiServerAddress: "127.0.0.1"
+
+  # apiServerPort — 0 (the default) means "pick a random free port". Pin it
+  # only if you need a stable port; a fixed port can collide.
+  apiServerPort: 6443
+
+  # podSubnet / serviceSubnet — change these only if they clash with your LAN
+  # or VPC. Defaults shown.
+  podSubnet: "10.244.0.0/16"
+  serviceSubnet: "10.96.0.0/16"
+
+  # disableDefaultCNI: false keeps Kind's built-in kindnet CNI. Set it to true
+  # only when you intend to install Calico or Cilium yourself.
+  disableDefaultCNI: false

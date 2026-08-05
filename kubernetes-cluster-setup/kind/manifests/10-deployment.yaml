@@ -1,0 +1,52 @@
+# Sample application Deployment for the single-node Kind cluster.
+#
+# Two replicas on one node is intentional: replicas are Pods, not machines.
+# You get real ReplicaSet behaviour (rolling updates, self-healing,
+# load-balanced Service endpoints) with no second node — and, correspondingly,
+# no node-failure tolerance.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: demo
+  labels:
+    app.kubernetes.io/name: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.30-alpine     # multi-arch: amd64 + arm64 (Apple Silicon)
+          # IfNotPresent is what makes `kind load docker-image` work: the kubelet
+          # uses the image already inside the node container instead of pulling.
+          # With `Always`, a side-loaded image is ignored and the pull fails.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
